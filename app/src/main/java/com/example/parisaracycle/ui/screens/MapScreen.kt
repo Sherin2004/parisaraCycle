@@ -90,6 +90,8 @@ fun MapScreen(
     val searchQuery by mapViewModel.searchQuery.collectAsState()
     val currentLocation by locationViewModel.currentLocation.collectAsState()
     val routePoints by mapViewModel.routePoints.collectAsState()
+    val isLoading by mapViewModel.isLoading.collectAsState()
+    val error by mapViewModel.error.collectAsState()
     
     val hazardsList by mapViewModel.hazards.collectAsState()
     val pitStopsList by mapViewModel.pitStops.collectAsState()
@@ -119,9 +121,9 @@ fun MapScreen(
         }
     }
 
-    // Re-fetch route if destination exists but route is empty
+    // Re-fetch route if destination exists but route is empty (and we're not already loading/error)
     LaunchedEffect(currentLocation, destination) {
-        if (currentLocation != null && destination != null && routePoints.isEmpty()) {
+        if (currentLocation != null && destination != null && routePoints.isEmpty() && !isLoading && error == null) {
             mapViewModel.fetchRoute(currentLocation!!, destination!!)
         }
     }
@@ -168,7 +170,7 @@ fun MapScreen(
                 }
             }
 
-            // Danger Zones (from Firebase)
+            // Danger Zones
             hazardsList.forEach { zone ->
                 val hue = when (zone.type) {
                     DangerType.POTHOLE -> BitmapDescriptorFactory.HUE_RED
@@ -184,7 +186,7 @@ fun MapScreen(
                 )
             }
 
-            // Pit Stops (from Firebase)
+            // Pit Stops
             pitStopsList.forEach { stop ->
                 val hue = when (stop.type) {
                     PitStopType.REPAIR -> BitmapDescriptorFactory.HUE_GREEN
@@ -262,12 +264,11 @@ fun MapScreen(
                         modifier = Modifier.padding(horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            Icons.Default.Search,
-                            contentDescription = "Search",
-                            tint = Color.DarkGray,
-                            modifier = Modifier.size(24.dp)
-                        )
+                        if (isLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = Color(0xFF4CAF50))
+                        } else {
+                            Icon(Icons.Default.Search, contentDescription = "Search", tint = Color.DarkGray, modifier = Modifier.size(24.dp))
+                        }
                         Spacer(Modifier.width(12.dp))
                         TextField(
                             value = searchQuery,
@@ -290,6 +291,22 @@ fun MapScreen(
                                 mapViewModel.searchLocation(context, searchQuery, currentLocation)
                                 focusManager.clearFocus()
                             })
+                        )
+                    }
+                }
+                
+                if (error != null) {
+                    Surface(
+                        modifier = Modifier.padding(top = 8.dp).fillMaxWidth(),
+                        color = Color(0xFFFFEBEE),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = error!!,
+                            color = Color.Red,
+                            modifier = Modifier.padding(8.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Center
                         )
                     }
                 }
@@ -352,18 +369,29 @@ fun MapScreen(
                 shadowElevation = 8.dp
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
-                    Text("Ready to start?", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = Color.Black)
-                    if (routePoints.isEmpty()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Ready to start?", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = Color.Black)
+                        if (isLoading) {
+                            Spacer(Modifier.width(12.dp))
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        }
+                    }
+                    if (isLoading) {
                         Text("Calculating path...", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                    } else {
+                    } else if (routePoints.isNotEmpty()) {
                         Text("Route found!", style = MaterialTheme.typography.bodySmall, color = Color(0xFF4CAF50))
+                    } else if (error != null) {
+                        Text(error!!, style = MaterialTheme.typography.bodySmall, color = Color.Red)
+                    } else {
+                        Text("Searching for best path...", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                     }
                     Spacer(Modifier.height(16.dp))
                     Button(
                         onClick = { mapViewModel.startNavigation() },
                         modifier = Modifier.fillMaxWidth().height(48.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF06292)),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = routePoints.isNotEmpty()
                     ) {
                         Text("Confirm Ride", color = Color.White, fontWeight = FontWeight.Bold)
                     }

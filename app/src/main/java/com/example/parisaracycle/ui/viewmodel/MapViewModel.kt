@@ -35,6 +35,12 @@ class MapViewModel : ViewModel() {
     private val _routePoints = MutableStateFlow<List<LatLng>>(emptyList())
     val routePoints: StateFlow<List<LatLng>> = _routePoints
 
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading
+
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error
+
     val hazards: StateFlow<List<DangerZone>> = repository.getHazards()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -53,6 +59,7 @@ class MapViewModel : ViewModel() {
 
     fun setDestination(location: LatLng?) {
         _destination.value = location
+        _error.value = null
         if (location == null) {
             _routePoints.value = emptyList()
         }
@@ -69,6 +76,7 @@ class MapViewModel : ViewModel() {
         _destination.value = null
         _searchQuery.value = ""
         _routePoints.value = emptyList()
+        _error.value = null
     }
 
     fun updateSearchQuery(query: String) {
@@ -85,6 +93,8 @@ class MapViewModel : ViewModel() {
 
     fun searchLocation(context: Context, query: String, origin: LatLng?) {
         viewModelScope.launch {
+            _isLoading.value = true
+            _error.value = null
             val geocoder = Geocoder(context)
             try {
                 @Suppress("DEPRECATION")
@@ -98,70 +108,79 @@ class MapViewModel : ViewModel() {
                     if (origin != null) {
                         fetchRoute(origin, latLng)
                     }
+                } else {
+                    _error.value = "Location not found"
                 }
-            } catch (e: IOException) {
+            } catch (e: Exception) {
+                _error.value = "Geocoder error: ${e.localizedMessage}"
                 e.printStackTrace()
+            } finally {
+                _isLoading.value = false
             }
         }
     }
 
     fun fetchRoute(origin: LatLng, destination: LatLng) {
         viewModelScope.launch {
+            _isLoading.value = true
+            _error.value = null
             val points = withContext(Dispatchers.IO) {
                 try {
                     val originStr = "${origin.latitude},${origin.longitude}"
                     val destStr = "${destination.latitude},${destination.longitude}"
-                    val urlString = "https://maps.googleapis.com/maps/api/directions/json?" +
-                            "origin=$originStr" +
-                            "&destination=$destStr" +
-                            "&mode=bicycling" +
-                            "&key=$apiKey"
                     
-                    val url = URL(urlString)
-                    val connection = url.openConnection() as HttpURLConnection
-                    val response = connection.inputStream.bufferedReader().readText()
+                    // Try Bicycling mode
+                    var result = fetchAndDecode(originStr, destStr, "bicycling")
                     
-                    val jsonResponse = JSONObject(response)
-                    val status = jsonResponse.optString("status")
-                    
-                    if (status == "OK") {
-                        val routes = jsonResponse.getJSONArray("routes")
-                        if (routes.length() > 0) {
-                            val polyPoints = routes.getJSONObject(0)
-                                .getJSONObject("overview_polyline")
-                                .getString("points")
-                            decodePolyline(polyPoints)
-                        } else {
-                            emptyList()
-                        }
-                    } else {
-                        fetchFallbackRoute(originStr, destStr)
+                    // Fallback to Walking if bicycling is not available
+                    if (result.isEmpty()) {
+                        result = fetchAndDecode(originStr, destStr, "walking")
                     }
+                    
+                    // Fallback to Driving as last resort
+                    if (result.isEmpty()) {
+                        result = fetchAndDecode(originStr, destStr, "driving")
+                    }
+                    
+                    result
                 } catch (e: Exception) {
-                    e.printStackTrace()
-                    emptyList()
+                    null
                 }
             }
-            if (points.isNotEmpty()) {
+            
+            if (points == null) {
+                _error.value = "Network or API Error"
+            } else if (points.isEmpty()) {
+                _error.value = "No path found between these locations"
+            } else {
                 _routePoints.value = points
+                _error.value = null
             }
+            _isLoading.value = false
         }
     }
 
-    private suspend fun fetchFallbackRoute(originStr: String, destStr: String): List<LatLng> {
-        return withContext(Dispatchers.IO) {
-            try {
-                val urlString = "https://maps.googleapis.com/maps/api/directions/json?" +
-                        "origin=$originStr" +
-                        "&destination=$destStr" +
-                        "&mode=driving" +
-                        "&key=$apiKey"
-                val url = URL(urlString)
-                val connection = url.openConnection() as HttpURLConnection
-                val response = connection.inputStream.bufferedReader().readText()
-                val jsonResponse = JSONObject(response)
-                if (jsonResponse.optString("status") == "OK") {
-                    val routes = jsonResponse.getJSONArray("routes")
+    private fun fetchAndDecode(originStr: String, destStr: String, mode: String): List<LatLng> {
+        var connection: HttpURLConnection? = null
+        return try {
+            val urlString = "https://maps.googleapis.com/maps/api/directions/json?" +
+                    "origin=$originStr" +
+                    "&destination=$destStr" +
+                    "&mode=$mode" +
+                    "&key=$apiKey"
+            
+            val url = URL(urlString)
+            connection = url.openConnection() as HttpURLConnection
+            connection.readTimeout = 10000
+            connection.connectTimeout = 15000
+            
+            val response = connection.inputStream.bufferedReader().readText()
+            val jsonResponse = JSONObject(response)
+            val status = jsonResponse.optString("status")
+            
+            if (status == "OK") {
+                val routes = jsonResponse.getJSONArray("routes")
+                if (routes.length() > 0) {
                     val polyPoints = routes.getJSONObject(0)
                         .getJSONObject("overview_polyline")
                         .getString("points")
@@ -169,9 +188,15 @@ class MapViewModel : ViewModel() {
                 } else {
                     emptyList()
                 }
-            } catch (e: Exception) {
+            } else {
+                // If the specific mode fails, we return empty so the caller can try a fallback
                 emptyList()
             }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
+        } finally {
+            connection?.disconnect()
         }
     }
 
