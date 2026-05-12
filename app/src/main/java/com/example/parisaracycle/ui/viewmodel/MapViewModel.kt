@@ -47,7 +47,7 @@ class MapViewModel : ViewModel() {
     val pitStops: StateFlow<List<PitStop>> = repository.getPitStops()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val apiKey = "AIzaSyDVV3XkWY4t49ljEyKoskDLvD4JAQ88SU0"
+    private val apiKey = "AIzaSyDE8ouGkjmzoF8S7MPx1S-qEjZRzE0tUsU"
 
     fun setTargetLocation(location: LatLng) {
         _targetLocation.value = location
@@ -131,6 +131,8 @@ class MapViewModel : ViewModel() {
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
+            
+            var finalStatus = "UNKNOWN"
             val points = withContext(Dispatchers.IO) {
                 try {
                     val originStr = "${origin.latitude},${origin.longitude}"
@@ -138,27 +140,34 @@ class MapViewModel : ViewModel() {
                     
                     // Try Bicycling mode
                     var result = fetchAndDecode(originStr, destStr, "bicycling")
+                    finalStatus = result.status
                     
-                    // Fallback to Walking if bicycling is not available
-                    if (result.isEmpty()) {
+                    // Fallback to Walking if bicycling is not available or zero results
+                    if (result.points.isEmpty() && (result.status == "OK" || result.status == "ZERO_RESULTS")) {
                         result = fetchAndDecode(originStr, destStr, "walking")
+                        finalStatus = result.status
                     }
                     
                     // Fallback to Driving as last resort
-                    if (result.isEmpty()) {
+                    if (result.points.isEmpty() && (result.status == "OK" || result.status == "ZERO_RESULTS")) {
                         result = fetchAndDecode(originStr, destStr, "driving")
+                        finalStatus = result.status
                     }
                     
-                    result
+                    result.points
                 } catch (e: Exception) {
                     null
                 }
             }
             
             if (points == null) {
-                _error.value = "Network or API Error"
+                _error.value = "Network or connection error"
             } else if (points.isEmpty()) {
-                _error.value = "No path found between these locations"
+                if (finalStatus == "OK" || finalStatus == "ZERO_RESULTS") {
+                    _error.value = "No path found between these locations"
+                } else {
+                    _error.value = "Google Maps Error: $finalStatus"
+                }
             } else {
                 _routePoints.value = points
                 _error.value = null
@@ -167,8 +176,11 @@ class MapViewModel : ViewModel() {
         }
     }
 
-    private fun fetchAndDecode(originStr: String, destStr: String, mode: String): List<LatLng> {
+    private data class RouteResult(val points: List<LatLng>, val status: String)
+
+    private fun fetchAndDecode(originStr: String, destStr: String, mode: String): RouteResult {
         var connection: HttpURLConnection? = null
+        var currentStatus = "ERROR"
         return try {
             val urlString = "https://maps.googleapis.com/maps/api/directions/json?" +
                     "origin=$originStr" +
@@ -183,25 +195,24 @@ class MapViewModel : ViewModel() {
             
             val response = connection.inputStream.bufferedReader().readText()
             val jsonResponse = JSONObject(response)
-            val status = jsonResponse.optString("status")
+            currentStatus = jsonResponse.optString("status", "UNKNOWN")
             
-            if (status == "OK") {
+            if (currentStatus == "OK") {
                 val routes = jsonResponse.getJSONArray("routes")
                 if (routes.length() > 0) {
                     val polyPoints = routes.getJSONObject(0)
                         .getJSONObject("overview_polyline")
                         .getString("points")
-                    decodePolyline(polyPoints)
+                    RouteResult(decodePolyline(polyPoints), currentStatus)
                 } else {
-                    emptyList()
+                    RouteResult(emptyList(), "ZERO_RESULTS")
                 }
             } else {
-                // If the specific mode fails, we return empty so the caller can try a fallback
-                emptyList()
+                RouteResult(emptyList(), currentStatus)
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            emptyList()
+            RouteResult(emptyList(), currentStatus)
         } finally {
             connection?.disconnect()
         }
