@@ -59,6 +59,9 @@ fun MainApp(onLogout: () -> Unit) {
                         label = { Text(item) },
                         selected = selectedItem == index,
                         onClick = {
+                            if (selectedItem == 0 && index != 0) {
+                                mapViewModel.clearSearch()
+                            }
                             selectedItem = index
                             when (index) {
                                 0 -> navController.navigate("map")

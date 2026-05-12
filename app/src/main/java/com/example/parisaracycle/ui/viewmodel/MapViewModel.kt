@@ -79,6 +79,13 @@ class MapViewModel : ViewModel() {
         _error.value = null
     }
 
+    fun clearSearch() {
+        _destination.value = null
+        _searchQuery.value = ""
+        _routePoints.value = emptyList()
+        _error.value = null
+    }
+
     fun updateSearchQuery(query: String) {
         _searchQuery.value = query
     }

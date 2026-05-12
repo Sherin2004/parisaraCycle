@@ -1,10 +1,11 @@
 package com.example.parisaracycle.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -97,62 +98,103 @@ fun BuddyScreen(onJoinRide: (LatLng) -> Unit = {}) {
 @Composable
 fun BuddyItem(buddy: Buddy, isMe: Boolean, onJoinRide: (LatLng) -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        onClick = { onJoinRide(buddy.position) }, // Entire card is now clickable
-        elevation = CardDefaults.cardElevation(defaultElevation = if (isMe) 6.dp else 2.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        onClick = { onJoinRide(buddy.position) },
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isMe) 8.dp else 2.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isMe) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surface
+            containerColor = Color.White
         ),
-        border = if (isMe) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+        border = if (isMe) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)) else null
     ) {
-        Row(
-            modifier = Modifier
-                .padding(16.dp)
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                shape = CircleShape,
-                color = if (isMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.size(48.dp)
-            ) {
-                Icon(
-                    Icons.Default.Person,
-                    contentDescription = null,
-                    modifier = Modifier.padding(8.dp),
-                    tint = if (isMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = buddy.name, 
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = if (isMe) FontWeight.Bold else FontWeight.Normal
-                )
-                Text(
-                    text = if (isMe) "Click to see your location on map" else "Active Now", 
-                    style = MaterialTheme.typography.labelSmall, 
-                    color = if (isMe) MaterialTheme.colorScheme.primary else Color.Gray
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            if (!isMe) {
-                Button(
-                    onClick = { 
-                        onJoinRide(buddy.position) 
-                    },
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                ) {
-                    Text("Join Ride", style = MaterialTheme.typography.labelMedium)
+        Box(
+            modifier = Modifier.background(
+                if (isMe) {
+                    androidx.compose.ui.graphics.Brush.horizontalGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                            MaterialTheme.colorScheme.surface
+                        )
+                    )
+                } else {
+                    androidx.compose.ui.graphics.Brush.linearGradient(
+                        colors = listOf(Color.White, Color.White)
+                    )
                 }
-            } else {
-                Badge(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.padding(end = 8.dp)
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .padding(16.dp)
+                    .fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = if (isMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(52.dp),
+                    shadowElevation = if (isMe) 4.dp else 0.dp
                 ) {
-                    Text("YOU", modifier = Modifier.padding(horizontal = 4.dp))
+                    Icon(
+                        Icons.Default.Person,
+                        contentDescription = null,
+                        modifier = Modifier.padding(12.dp),
+                        tint = if (isMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+                
+                Spacer(modifier = Modifier.width(16.dp))
+                
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = buddy.name, 
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                        )
+                        if (isMe) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Surface(
+                                color = MaterialTheme.colorScheme.primary,
+                                shape = CircleShape,
+                                modifier = Modifier.height(18.dp)
+                            ) {
+                                Text(
+                                    "YOU", 
+                                    modifier = Modifier.padding(horizontal = 6.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                            }
+                        }
+                    }
+                    Text(
+                        text = if (isMe) "Tracking your location" else "Nearby • 2 min ago", 
+                        style = MaterialTheme.typography.bodySmall, 
+                        color = if (isMe) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f) else Color.Gray
+                    )
+                }
+                
+                if (!isMe) {
+                    IconButton(
+                        onClick = { onJoinRide(buddy.position) },
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    ) {
+                        Icon(Icons.Default.DirectionsBike, contentDescription = "Join Ride")
+                    }
+                } else {
+                    Icon(
+                        Icons.Default.ChevronRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                    )
                 }
             }
         }
