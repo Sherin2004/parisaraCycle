@@ -10,14 +10,32 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.parisaracycle.data.BuddyRepository
 import com.example.parisaracycle.model.Buddy
+import com.google.firebase.auth.FirebaseAuth
+
+import androidx.compose.foundation.shape.CircleShape
+import com.google.android.gms.maps.model.LatLng
 
 @Composable
-fun BuddyScreen() {
+fun BuddyScreen(onJoinRide: (LatLng) -> Unit = {}) {
     val repository = remember { BuddyRepository() }
-    val buddies by repository.getNearbyBuddies().collectAsState(initial = emptyList())
+    val buddiesRaw by repository.getNearbyBuddies().collectAsState(initial = emptyList())
+    val currentUserId = remember { FirebaseAuth.getInstance().currentUser?.uid }
+
+    // Process buddies to put "Me" on top
+    val buddies = remember(buddiesRaw, currentUserId) {
+        val sortedList = buddiesRaw.sortedWith(compareByDescending { it.id == currentUserId })
+        sortedList.map { buddy ->
+            if (buddy.id == currentUserId) {
+                buddy.copy(name = "Me (You)")
+            } else {
+                buddy
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -45,7 +63,11 @@ fun BuddyScreen() {
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(buddies) { buddy ->
-                    BuddyItem(buddy)
+                    BuddyItem(
+                        buddy = buddy, 
+                        isMe = buddy.id == currentUserId,
+                        onJoinRide = onJoinRide
+                    )
                 }
             }
         }
@@ -71,11 +93,17 @@ fun BuddyScreen() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BuddyItem(buddy: Buddy) {
+fun BuddyItem(buddy: Buddy, isMe: Boolean, onJoinRide: (LatLng) -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        onClick = { onJoinRide(buddy.position) }, // Entire card is now clickable
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isMe) 6.dp else 2.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isMe) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surface
+        ),
+        border = if (isMe) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
     ) {
         Row(
             modifier = Modifier
@@ -84,28 +112,48 @@ fun BuddyItem(buddy: Buddy) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
-                shape = MaterialTheme.shapes.extraLarge,
-                color = MaterialTheme.colorScheme.primaryContainer,
+                shape = CircleShape,
+                color = if (isMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer,
                 modifier = Modifier.size(48.dp)
             ) {
                 Icon(
                     Icons.Default.Person,
                     contentDescription = null,
                     modifier = Modifier.padding(8.dp),
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    tint = if (isMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer
                 )
             }
             Spacer(modifier = Modifier.width(16.dp))
-            Column {
-                Text(text = buddy.name, style = MaterialTheme.typography.titleMedium)
-                Text(text = "Active Now", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = buddy.name, 
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = if (isMe) FontWeight.Bold else FontWeight.Normal
+                )
+                Text(
+                    text = if (isMe) "Click to see your location on map" else "Active Now", 
+                    style = MaterialTheme.typography.labelSmall, 
+                    color = if (isMe) MaterialTheme.colorScheme.primary else Color.Gray
+                )
             }
-            Spacer(modifier = Modifier.weight(1.0f))
-            Button(
-                onClick = { /* Connect logic */ },
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-            ) {
-                Text("Join Ride", style = MaterialTheme.typography.labelMedium)
+            Spacer(modifier = Modifier.width(8.dp))
+            if (!isMe) {
+                Button(
+                    onClick = { 
+                        onJoinRide(buddy.position) 
+                    },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                ) {
+                    Text("Join Ride", style = MaterialTheme.typography.labelMedium)
+                }
+            } else {
+                Badge(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.padding(end = 8.dp)
+                ) {
+                    Text("YOU", modifier = Modifier.padding(horizontal = 4.dp))
+                }
             }
         }
     }

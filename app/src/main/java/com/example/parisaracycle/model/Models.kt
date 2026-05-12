@@ -10,18 +10,18 @@ data class DangerZone(
 )
 
 enum class DangerType {
-    POTHOLE, DANGEROUS_INTERSECTION, BLOCKAGE
+    POTHOLE, BLOCKAGE, DANGEROUS_INTERSECTION, OTHER
 }
 
 data class PitStop(
     val id: String = "",
     val position: LatLng = LatLng(0.0, 0.0),
     val name: String = "",
-    val type: PitStopType = PitStopType.REPAIR_SHOP
+    val type: PitStopType = PitStopType.REPAIR
 )
 
 enum class PitStopType {
-    REPAIR_SHOP, WATER_POINT
+    REPAIR, WATER, PARKING, AIR_PUMP, CHARGING
 }
 
 data class Buddy(
